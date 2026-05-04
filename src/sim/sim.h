@@ -61,8 +61,8 @@
 #define WHEEL_ANGULAR_VELOCITY_MAX (2.0f * MOUSE_WHEEL_VELOCITY_MAX / MOUSE_WHEEL_TRACK)
 
 // Sensor noise
-#define SETPOINT_DISTANCE_NOISE 0.0001f // meters
-#define SETPOINT_ROTATION_NOISE 0.005f  // radians
+#define SETPOINT_DISTANCE_NOISE 0.01f  // factor of target distance
+#define SETPOINT_ROTATION_NOISE 0.01f  // radians
 
 // Mouse sensors (5 IR sensors: left, front-left, front, front-right, right)
 

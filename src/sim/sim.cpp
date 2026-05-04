@@ -417,10 +417,10 @@ const SimState *GetSimState(Sim *sim)
 
 void SetMouseSetpoint(Sim *sim, float distance, float rotation)
 {
-    // Add Gaussian noise
+    // Add mechanical noise
     static std::mt19937 rng(std::random_device{}());
     static std::normal_distribution<float> dist(0.0f, 1.0f);
-    distance += dist(rng) * SETPOINT_DISTANCE_NOISE;
+    distance += dist(rng) * SETPOINT_DISTANCE_NOISE * distance;
     rotation += dist(rng) * SETPOINT_ROTATION_NOISE;
 
     sim->setpoint_reference_position = sim->mouse_position;
