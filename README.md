@@ -64,7 +64,7 @@ Implementa tu propio agente en una carpeta nueva dentro de `src/`. Puedes copiar
 
 ### API del agente
 
-Tu agente debe implementar una estructura `MouseDescriptor` con cinco callbacks:
+Tu agente debe implementar una estructura `MouseDescriptor` con cuatro callbacks:
 
 ```cpp
 struct MouseDescriptor {
@@ -72,7 +72,7 @@ struct MouseDescriptor {
     void *(*create)();                          // inicialización
     void  (*destroy)(void *userdata);           // liberación de memoria
     void  (*update)(void *userdata, Sim *sim);  // lógica principal, llamada cada frame
-    void  (*reset)(void *userdata, Sim *sim);   // llamado al inicio de cada corrida
+    void  (*reset)(void *userdata, Sim *sim);   // llamado en la primera corrida y cuando se resetea el ratón
 };
 ```
 
