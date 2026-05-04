@@ -186,8 +186,6 @@ static void UpdateMouseState(Sim *sim)
 
     sim->mouse_position = {position.x, position.y};
     sim->mouse_rotation = rotation;
-    sim->state.mouse_velocity = {velocity.x, velocity.y};
-    sim->state.mouse_angular_velocity = angular_velocity;
 
     // Sensor state update
     b2QueryFilter filter = b2DefaultQueryFilter();

@@ -104,8 +104,6 @@ struct SimState
     float run_time;      // Elapsed time since start of run (seconds).
     float run_time_best; // Best time achieved so far (seconds).
 
-    Vector2 mouse_velocity;          // Linear velocity (m/s)
-    float mouse_angular_velocity;    // Angular velocity (rad/s, CCW+)
     float mouse_sensors[SENSOR_NUM]; // Distance readings from the 5 IR sensors (meters)
     float mouse_remaining_distance;  // Distance remaining to reach setpoint (meters, positive = forward)
     float mouse_remaining_rotation;  // Rotation remaining to reach setpoint (radians, CCW+)

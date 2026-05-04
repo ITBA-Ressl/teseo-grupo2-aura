@@ -56,7 +56,7 @@ SENSOR_RIGHT       — 90° derecha
 
 El alcance máximo es de **1 m**. Si no hay una pared dentro de ese rango, el sensor devuelve **1 m**.
 
-El ratón también dispone de sensores de **velocidad lineal** (m/s) y **velocidad angular** (rad/s), y de sensores que indican cuánto falta para alcanzar el setpoint actual: **distancia restante** (metros) y **rotación restante** (radianes).
+El ratón también dispone de sensores que indican cuánto falta para alcanzar el setpoint actual: **distancia restante** (metros) y **rotación restante** (radianes).
 
 ## Tu misión
 
@@ -81,8 +81,6 @@ Dentro de `update`, puedes usar las siguientes funciones:
 ```cpp
 // Estado completo del simulador
 const SimState *GetSimState(sim);
-    // .mouse_velocity             — velocidad lineal (m/s)
-    // .mouse_angular_velocity     — velocidad angular (rad/s)
     // .mouse_sensors[5]           — distancias a paredes (m)
     // .mouse_remaining_distance   — distancia restante al setpoint
     // .mouse_remaining_rotation   — rotación restante al setpoint
