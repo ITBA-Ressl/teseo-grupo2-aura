@@ -1,0 +1,106 @@
+# =========================
+# Build directories
+# =========================
+/build/
+/build-*/
+/cmake-build-*/
+/out/
+/bin/
+/lib/
+
+# =========================
+# CMake generated files
+# =========================
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# CMake 3.15+
+CMakeUserPresets.json
+
+# =========================
+# Make / Ninja
+# =========================
+Makefile
+*.make
+*.ninja
+.ninja_deps
+.ninja_log
+
+# =========================
+# Visual Studio
+# =========================
+.vs/
+*.vcxproj*
+*.sln
+*.VC.db
+*.VC.opendb
+
+# =========================
+# CLion / JetBrains
+# =========================
+.idea/
+cmake-build-*/
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+
+# =========================
+# Xcode
+# =========================
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+
+# =========================
+# Compiler artifacts
+# =========================
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.dll
+*.so
+*.so.*
+*.dylib
+*.exe
+*.out
+*.app
+
+# =========================
+# Debug / profiling
+# =========================
+*.dSYM/
+*.gcno
+*.gcda
+*.gcov
+*.prof
+*.log
+
+# =========================
+# OS generated files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Temporary files
+# =========================
+*~
+*.swp
+*.swo
+
+# =========================
+# Claude
+# =========================
+.claude
+CLAUDE.md
