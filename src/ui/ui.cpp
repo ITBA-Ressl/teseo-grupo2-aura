@@ -20,7 +20,6 @@
 
 #define WINDOW_WIDTH 1280
 #define WINDOW_HEIGHT 720
-#define TARGET_FPS 60
 
 #define PIXELS_PER_METER (WINDOW_HEIGHT / MAZE_SIZE)
 #define CELL_SIZE_PIXELS (CELL_SIZE * PIXELS_PER_METER)
@@ -174,14 +173,14 @@ static void DrawMouseSensors()
 {
     const SimState *sim_state = GetSimState(ui.sim);
 
-    for (uint32_t i = 0; i < SENSOR_NUM; i++)
+    for (uint32_t i = 0; i < IR_SENSOR_NUM; i++)
     {
-        float sensor_distance = sim_state->mouse_sensors[i];
-        bool sensor_hit = sensor_distance < (SENSOR_RANGE_MAX - 1E-6);
+        float sensor_distance = sim_state->ir_sensors[i];
+        bool sensor_hit = sensor_distance < (IR_SENSOR_RANGE_MAX - 1E-6);
 
         Vector2 start = WorldToScreen(GetMousePosition(ui.sim));
 
-        float angle = GetMouseRotation(ui.sim) + SENSOR_ANGLES[i];
+        float angle = GetMouseRotation(ui.sim) + IR_SENSOR_ANGLES[i];
         Vector2 direction = {std::cos(-angle), std::sin(-angle)};
         Vector2 translation = Vector2Scale(direction, sensor_distance);
         Vector2 end = Vector2Add(start, Vector2Scale(direction, sensor_distance * PIXELS_PER_METER));
@@ -281,19 +280,19 @@ static void DrawPanel()
 
     DrawPanelText("SENSORS", position.x, position.y, FONT_SIZE_SMALL, COLOR_MUTED);
 
-    for (uint32_t i = 0; i < SENSOR_NUM; i++)
+    for (uint32_t i = 0; i < IR_SENSOR_NUM; i++)
     {
-        float sensor_distance = state->mouse_sensors[i];
-        float sensor_ratio = (sensor_distance - SENSOR_RANGE_MIN) / (SENSOR_RANGE_MAX - SENSOR_RANGE_MIN);
+        float sensor_distance = state->ir_sensors[i];
+        float sensor_ratio = (sensor_distance - IR_SENSOR_RANGE_MIN) / (IR_SENSOR_RANGE_MAX - IR_SENSOR_RANGE_MIN);
         float sensor_pixels = sensor_ratio * PANEL_BAR_WIDTH;
 
         Color color;
         if (sensor_distance < CELL_HALF_SIZE)
             color = ColorLerp(COLOR_BAR_RED, COLOR_BAR_YELLOW,
-                              (sensor_distance - SENSOR_RANGE_MIN) / (CELL_HALF_SIZE - SENSOR_RANGE_MIN));
+                              (sensor_distance - IR_SENSOR_RANGE_MIN) / (CELL_HALF_SIZE - IR_SENSOR_RANGE_MIN));
         else
             color = ColorLerp(COLOR_BAR_YELLOW, COLOR_BAR_GREEN,
-                              (sensor_distance - CELL_HALF_SIZE) / (SENSOR_RANGE_MAX - CELL_HALF_SIZE));
+                              (sensor_distance - CELL_HALF_SIZE) / (IR_SENSOR_RANGE_MAX - CELL_HALF_SIZE));
 
         DrawRectangleLines(position.x + PANEL_TAB2 + 1, position.y, PANEL_BAR_WIDTH - 1, FONT_SIZE_SMALL - 1, COLOR_MUTED);
         DrawRectangle(position.x + PANEL_TAB2, position.y, sensor_pixels, FONT_SIZE_SMALL, color);
@@ -319,8 +318,8 @@ void CreateUI(const Maze *maze, Mouse *mouse)
 
     ui.sim = CreateSim(maze);
 
+    SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Teseo — Micromouse Virtual Competition");
-    SetTargetFPS(TARGET_FPS);
 }
 
 void DestroyUI()

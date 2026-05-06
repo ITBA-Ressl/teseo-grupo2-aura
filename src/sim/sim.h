@@ -30,8 +30,8 @@
 
 // Maze geometry
 
-#define CELL_SIZE 0.18f       // meters
-#define WALL_THICKNESS 0.012f // meters
+#define CELL_SIZE 0.18f       // m
+#define WALL_THICKNESS 0.012f // m
 
 #define CELL_HALF_SIZE (CELL_SIZE / 2.0f)
 #define WALL_HALF_THICKNESS (WALL_THICKNESS / 2.0f)
@@ -40,46 +40,52 @@
 
 // Mouse geometry and physics
 
-#define MOUSE_WIDTH 0.080f       // meters
-#define MOUSE_LENGTH 0.100f      // meters
+#define MOUSE_WIDTH 0.080f       // m
+#define MOUSE_LENGTH 0.100f      // m
 #define MOUSE_MASS 0.100f        // kg
-#define MOUSE_WHEEL_TRACK 0.070f // meters (axle width)
+#define MOUSE_WHEEL_TRACK 0.070f // m (axle width)
 
 #define MOUSE_HALF_WIDTH (MOUSE_WIDTH / 2.0f)
 #define MOUSE_HALF_LENGTH (MOUSE_LENGTH / 2.0f)
-#define MOUSE_DENSITY (MOUSE_MASS / (MOUSE_HALF_WIDTH * MOUSE_HALF_LENGTH))
+#define MOUSE_DENSITY (MOUSE_MASS / (MOUSE_WIDTH * MOUSE_LENGTH))
 #define MOUSE_WHEEL_HALF_TRACK (MOUSE_WHEEL_TRACK / 2.0f)
 
-// Mouse controller
+// Wheel drive
 
-#define MOUSE_WHEEL_VELOCITY_MAX 1.5f // m/s
-#define MOUSE_WHEEL_FORCE_MAX 0.5f    // N per wheel
-#define MOUSE_MOTOR_K 6.0f            // N/(m/s) — velocity → force gain
-#define MOUSE_KP_ROTATION 8.0f        // rad/s per rad of error (rotation)
-#define MOUSE_KP_DISTANCE 8.0f        // m/s per m of error (distance)
+#define MOUSE_WHEEL_VELOCITY_MAX 1.5f                                    // m/s
+#define MOUSE_WHEEL_FORCE_MAX 0.5f                                       // N
+#define MOUSE_MOTOR_K (MOUSE_WHEEL_FORCE_MAX / MOUSE_WHEEL_VELOCITY_MAX) // N·s/m (k_t·k_e / R·r²)
+
+// Odometry error
+
+#define ODOMETRY_DISTANCE_ERROR (0.007f / 1.0f) // Factor of distance
+#define ODOMETRY_ROTATION_ERROR (4.0f / 90.0f)  // Factor of rotation
+
+// Wheel controller
+
+#define MOUSE_KP_DISTANCE 8.0f  // m/s per m (distance proportional gain)
+#define MOUSE_KD_DISTANCE 1.5f  // m/s per m/s (velocity damping)
+#define MOUSE_KP_ROTATION 1.0f  // m/s per rad (rotation proportional gain)
+#define MOUSE_KD_ROTATION 0.09f // m/s per rad/s (angular velocity damping)
 
 #define WHEEL_ANGULAR_VELOCITY_MAX (2.0f * MOUSE_WHEEL_VELOCITY_MAX / MOUSE_WHEEL_TRACK)
 
-// Sensor noise
-#define SETPOINT_DISTANCE_NOISE 0.01f  // factor of target distance
-#define SETPOINT_ROTATION_NOISE 0.01f  // radians
-
 // Mouse sensors (5 IR sensors: left, front-left, front, front-right, right)
 
-#define SENSOR_NUM 5
-#define SENSOR_RANGE_MIN MOUSE_HALF_WIDTH // meters
-#define SENSOR_RANGE_MAX 1.0f             // meters
+#define IR_SENSOR_NUM 5
+#define IR_SENSOR_RANGE_MIN MOUSE_HALF_WIDTH // m
+#define IR_SENSOR_RANGE_MAX 1.0f             // m
 
 enum
 {
-    SENSOR_LEFT,
-    SENSOR_FRONT_LEFT,
-    SENSOR_FRONT,
-    SENSOR_FRONT_RIGHT,
-    SENSOR_RIGHT,
+    IR_SENSOR_LEFT,
+    IR_SENSOR_FRONT_LEFT,
+    IR_SENSOR_FRONT,
+    IR_SENSOR_FRONT_RIGHT,
+    IR_SENSOR_RIGHT,
 };
 
-extern float SENSOR_ANGLES[SENSOR_NUM];
+extern float IR_SENSOR_ANGLES[IR_SENSOR_NUM];
 
 // Sim state
 
@@ -104,9 +110,13 @@ struct SimState
     float run_time;      // Elapsed time since start of run (seconds).
     float run_time_best; // Best time achieved so far (seconds).
 
-    float mouse_sensors[SENSOR_NUM]; // Distance readings from the 5 IR sensors (meters)
-    float mouse_remaining_distance;  // Distance remaining to reach setpoint (meters, positive = forward)
-    float mouse_remaining_rotation;  // Rotation remaining to reach setpoint (radians, CCW+)
+    Vector2 mouse_accelerometer; // Linear acceleration in body frame (m/s²): x=forward, y=left (CCW+)
+    float mouse_gyroscope;       // Angular velocity (rad/s, CCW+)
+
+    float setpoint_distance_remaining; // Distance remaining to reach setpoint (meters, positive = forward)
+    float setpoint_rotation_remaining; // Rotation remaining to reach setpoint (radians, CCW+)
+
+    float ir_sensors[IR_SENSOR_NUM]; // Distance readings from the 5 IR sensors (meters)
 };
 
 // Opaque handle

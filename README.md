@@ -22,6 +22,12 @@ El laberinto ya está generado. La física, los sensores y el rendering ya funci
 
 ## El simulador
 
+Para compilar el proyecto, instala primero las dependencias:
+
+```bash
+vcpkg install raylib box2d
+```
+
 Ejecuta el programa con:
 
 ```bash
@@ -31,7 +37,7 @@ teseo --file abc.maze # laberinto cargado desde archivo
 
 Puedes descargar laberintos reales de competencia en estos sitios:
 
-- [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles/blob/master/classic/AAMC15Maze.txt)
+- [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles)
 - [tcp4me.com - Micromouse Mazes](https://www.tcp4me.com/mmr/mazes/)
 
 Presiona `[R]` para iniciar la primera corrida.
@@ -42,21 +48,66 @@ Dispones de **5 corridas** y **300 segundos** de tiempo total. La mejor marca es
 
 El tiempo de cada corrida se cuenta desde que el ratón **abandona la celda inicial** hasta que **llega a cualquiera de las cuatro celdas del destino**. Al terminar una corrida, el ratón debe **volver al origen** para poder iniciar la siguiente.
 
-## Los sensores
+## El movimiento
 
-El ratón cuenta con **5 sensores infrarrojos de distancia** que miden, en metros, la distancia hasta la pared más cercana en cada dirección:
+El ratón se controla con la función:
 
-```text
-SENSOR_LEFT        — 90° izquierda
-SENSOR_FRONT_LEFT  — 45° izquierda
-SENSOR_FRONT       — frente
-SENSOR_FRONT_RIGHT — 45° derecha
-SENSOR_RIGHT       — 90° derecha
+```cpp
+SetMouseSetpoint(sim, distance, rotation);
 ```
 
-El alcance máximo es de **1 m**. Si no hay una pared dentro de ese rango, el sensor devuelve **1 m**.
+- `distance`: cuántos metros avanzar hacia adelante (positivo = adelante).
+- `rotation`: cuánto girar respecto a la orientación actual, en radianes (positivo = izquierda, negativo = derecha). Puedes usar las constantes `TURN_CCW`, `TURN_CW` y `TURN_REVERSE`.
 
-El ratón también dispone de sensores que indican cuánto falta para alcanzar el setpoint actual: **distancia restante** (metros) y **rotación restante** (radianes).
+⚠️ **Importante**: el simulador introduce error de odometría. No asumas que el ratón termina exactamente donde le pediste.
+
+## Los sensores
+
+Los sensores se leen a través de:
+
+```cpp
+const SimState *s = GetSimState(sim);
+```
+
+### Infrarrojos
+
+El ratón cuenta con **5 sensores de distancia** (metros) que apuntan en distintas direcciones:
+
+| Constante | Dirección |
+| --------- | --------- |
+| `IR_SENSOR_LEFT` | 90° izquierda |
+| `IR_SENSOR_FRONT_LEFT` | 45° izquierda |
+| `IR_SENSOR_FRONT` | frente |
+| `IR_SENSOR_FRONT_RIGHT` | 45° derecha |
+| `IR_SENSOR_RIGHT` | 90° derecha |
+
+```cpp
+s->ir_sensors[IR_SENSOR_FRONT]   // distancia al frente (m)
+s->ir_sensors[IR_SENSOR_LEFT]    // distancia a la izquierda (m)
+// ...
+```
+
+El alcance máximo es **1 m**. Si no hay pared en rango, el sensor devuelve **1 m**.
+
+### IMU
+
+La **IMU** (Inertial Measurement Unit) mide el movimiento propio del ratón.
+
+```cpp
+s->mouse_accelerometer   // Vector2 (m/s²): x=adelante, y=izquierda (CCW+)
+s->mouse_gyroscope       // float (rad/s, CCW+): velocidad angular
+```
+
+### Setpoint
+
+El **setpoint** es el objetivo de movimiento que le pediste al controlador con `SetMouseSetpoint(...)`. Estos campos indican cuánto falta para completar ese comando.
+
+```cpp
+s->setpoint_distance_remaining   // float (m): distancia restante (positivo = falta avanzar)
+s->setpoint_rotation_remaining   // float (rad, CCW+): rotación restante
+```
+
+Puedes cambiar el setpoint en todo momento.
 
 ## Tu misión
 
@@ -79,32 +130,19 @@ struct MouseDescriptor {
 Dentro de `update`, puedes usar las siguientes funciones:
 
 ```cpp
-// Estado completo del simulador
-const SimState *GetSimState(sim);
-    // .mouse_sensors[5]           — distancias a paredes (m)
-    // .mouse_remaining_distance   — distancia restante al setpoint
-    // .mouse_remaining_rotation   — rotación restante al setpoint
-    // .time, .run_number, .run_state, .run_time, .run_time_best
+const SimState *GetSimState(sim);          // sensores, setpoint y estado de la corrida
+void SetMouseSetpoint(sim, distance, rotation); // ver "El movimiento"
 
-// Emitir un comando de movimiento
-void SetMouseSetpoint(sim, distance, rotation);
-    // distance: metros a recorrer (positivo = adelante)
-    // rotation: giro relativo a la orientación actual (radianes, CCW+)
-    // cuanto mayor sea la magnitud del setpoint (distance/rotation),
-    // más rápido se moverá el robot
-
-// Herramientas
-float AngleDiff(float source, float target);                // diferencia angular en [-pi, pi]
+float AngleDiff(float source, float target);                // diferencia angular en [-π, π]
 Vector2 Vector2FromAngle(float angle, float length = 1.0f); // vector a partir de un ángulo
 Cell PositionToCell(Vector2 position);                      // posición → celda del laberinto
 
-// Visualización
-void PaintCell(sim, cell, COLOR_CELL_VISITED);
-uint32_t GetCellColor(Sim *sim, Cell cell);
-void ResetCellColors(Sim *sim);
+void PaintCell(sim, cell, color);   // COLOR_CELL_VISITED, COLOR_CELL_RED/GREEN/BLUE
+uint32_t GetCellColor(sim, cell);
+void ResetCellColors(sim);
 ```
 
-No puedes acceder a los campos de `sim`.
+No puedes acceder a los campos internos de `sim` ni a las otras funciones del simulador.
 
 ### Cómo registrar tu agente
 
@@ -115,11 +153,11 @@ No puedes acceder a los campos de `sim`.
 
 ### Estrategias posibles
 
-El **starter mouse** incluido usa un seguidor de pared derecha: es simple de entender, pero puede quedar en un bucle infinito si el objetivo está en una isla (zona desconectada de la pared exterior), y está lejos de ser óptimo.
+El **starter mouse** usa un seguidor de pared derecha: es fácil de entender, pero puede quedar en un bucle infinito si el laberinto tiene ciclos, y está lejos de ser óptimo.
 
 Algunas ideas mejores:
 
-- **Flood Fill**: asigna a cada celda una distancia al objetivo y avanza siempre hacia el valor menor. Es el algoritmo estándar en competencias reales. Puede actualizarse online a medida que el ratón descubre paredes.
+- **Flood Fill**: asigna a cada celda una distancia al objetivo y avanza siempre hacia el valor menor. Es el algoritmo base en competencias reales. Puede actualizarse online a medida que el ratón descubre paredes.
 - **Dead-end filling**: elimina callejones del mapa antes de trazar la ruta.
 - **Dijkstra / A\***: búsqueda de camino óptimo sobre el mapa conocido.
 - **Estrategia multi-corrida**: en las primeras corridas explora y construye un mapa; en las últimas, ejecuta la ruta óptima sin detenerse a explorar.
@@ -139,17 +177,18 @@ Debes entregar:
 
 ## Recomendaciones
 
-- Logra que tu ratón sea robusto al **ruido** de los sensores.
+- Logra que tu ratón sea robusto al **error odométrico**. Para ello la información de los sensores IR y del giróscopo te será muy útil.
 - Empieza con el seguidor de pared y asegúrate de que funciona correctamente antes de intentar algo más complejo.
 - Usa `PaintCell` para visualizar el estado interno de tu algoritmo mientras depuras.
-- Prueba con varios valores de `--gen` y con archivos cargados por `--file`: un buen algoritmo debe funcionar en cualquier laberinto.
+- Prueba con varios valores de `--gen` y con archivos cargados por `--file`: un buen algoritmo debe funcionar en cualquier laberinto, especialmente en los de competencias.
 - Usa Git y haz commits con frecuencia.
+- **No modifiques** el motor ni la UI del simulador.
 
 ## Bonus points 🚀
 
 - Optimiza la trayectoria para **minimizar giros**: recorrer varias celdas seguidas en línea recta suele ser mucho más rápido.
 - Optimiza los giros.
-- Implementa recorridos en **diagonal sin giros** cuando tu estrategia lo permita.
+- Implementa recorridos en **diagonal sin giro** cuando tu estrategia lo permita.
 
 ## Referencias
 
