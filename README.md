@@ -96,7 +96,7 @@ El alcance máximo es **1 m**. Si no hay pared en rango, el sensor devuelve **1 
 La **IMU** (Inertial Measurement Unit) mide el movimiento propio del ratón.
 
 ```cpp
-s->mouse_accelerometer   // Vector2 (m/s²): x=adelante, y=izquierda (CCW+)
+s->mouse_accelerometer   // Vector2 (m/s²): y=adelante, x=derecha
 s->mouse_gyroscope       // float (rad/s, CCW+): velocidad angular
 ```
 
