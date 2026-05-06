@@ -97,8 +97,8 @@ int main(int argc, char *argv[])
     }
 
     // Create the mouse agent
-    // Mouse *mouse = CreateMouse(starter_mouse);
-    Mouse *mouse = CreateMouse(keyboard_mouse);
+    Mouse *mouse = CreateMouse(starter_mouse);
+    // Mouse *mouse = CreateMouse(keyboard_mouse);
 
     // Create the UI
     CreateUI(maze, mouse);

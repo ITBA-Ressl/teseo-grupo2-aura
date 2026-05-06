@@ -59,6 +59,8 @@ SetMouseSetpoint(sim, distance, rotation);
 - `distance`: cuántos metros avanzar hacia adelante (positivo = adelante).
 - `rotation`: cuánto girar respecto a la orientación actual, en radianes (positivo = izquierda, negativo = derecha). Puedes usar las constantes `TURN_CCW`, `TURN_CW` y `TURN_REVERSE`.
 
+Cuánto más lejos pones el setpoint, más rápido se mueve el mouse.
+
 ⚠️ **Importante**: el simulador introduce error de odometría. No asumas que el ratón termina exactamente donde le pediste.
 
 ## Los sensores
