@@ -385,9 +385,12 @@ void DestroySim(Sim *sim)
 
 bool ResetSim(Sim *sim)
 {
+    if (!StartRun(sim))
+        return false;
+
     ResetMousePhysics(sim);
 
-    return StartRun(sim);
+    return true;
 }
 
 bool IsSimRunning(Sim *sim)
