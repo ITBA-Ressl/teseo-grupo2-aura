@@ -245,6 +245,13 @@ static void DrawPanel()
     const char *sensor_labels[] = {"Left", "FwdLeft", "Forward", "FwdRight", "Right"};
     const char *run_state_labels[] = {"Idle", "Running", "Returning"};
 
+    const char *run_state_label;
+
+    if (state->time >= RUN_TIME_MAX)
+        run_state_label = "Out of time";
+    else
+        run_state_label = run_state_labels[state->run_state];
+
     // Background
 
     DrawRectangle(PANEL_LEFT, 0, PANEL_WIDTH, WINDOW_HEIGHT, COLOR_PANEL_BACKGROUND);
@@ -266,7 +273,7 @@ static void DrawPanel()
 
     DrawPanelText("STATS", position.x, position.y, FONT_SIZE_SMALL, COLOR_MUTED);
     DrawPanelTab("Run", TextFormat("%d", state->run_number), position.x, position.y);
-    DrawPanelTab("Run state", run_state_labels[state->run_state], position.x, position.y);
+    DrawPanelTab("Run state", run_state_label, position.x, position.y);
     DrawPanelTab("Time", TextFormat("%.3f s", state->time), position.x, position.y);
     DrawPanelTab("Run time", TextFormat("%.3f s", state->run_time), position.x, position.y);
     if (state->run_time_best > 0.0f)

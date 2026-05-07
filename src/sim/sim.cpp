@@ -193,7 +193,7 @@ static void UpdateIMU(Sim *sim, float dt)
     sim->mouse_velocity_last = mouse_velocity;
 
     // Compute acceleration
-    sim->state.mouse_accelerometer = Vector2Scale(delta_v, 1.0f / dt);
+    sim->state.accelerometer = Vector2Scale(delta_v, 1.0f / dt);
 }
 
 static void UpdateMouseState(Sim *sim)
@@ -204,7 +204,7 @@ static void UpdateMouseState(Sim *sim)
 
     sim->mouse_position = {position.x, position.y};
     sim->mouse_rotation = rotation;
-    sim->state.mouse_gyroscope = angular_velocity;
+    sim->state.gyroscope = angular_velocity;
 
     b2QueryFilter filter = b2DefaultQueryFilter();
 
@@ -236,8 +236,8 @@ static void ResetMouseController(Sim *sim, Vector2 position, float rotation)
     sim->target_rotation = rotation;
     sim->odometry_rotation_error = 1.0f;
 
-    sim->state.setpoint_distance_remaining = 0.0f;
-    sim->state.setpoint_rotation_remaining = 0.0f;
+    sim->state.setpoint_distance = 0.0f;
+    sim->state.setpoint_rotation = 0.0f;
 }
 
 static void ResetMousePhysics(Sim *sim)
@@ -252,7 +252,7 @@ static void ResetMousePhysics(Sim *sim)
 
     UpdateMouseState(sim);
     sim->mouse_velocity_last = {0.0f, 0.0f};
-    sim->state.mouse_accelerometer = {0.0f, 0.0f};
+    sim->state.accelerometer = {0.0f, 0.0f};
 
     // Reset controller
     ResetMouseController(sim, position, rotation);
@@ -349,8 +349,8 @@ static void UpdateMouseController(Sim *sim)
     float left_velocity_target = velocity_target - angular_velocity_target;
     float right_velocity_target = velocity_target + angular_velocity_target;
 
-    sim->state.setpoint_distance_remaining = distance_error / sim->odometry_distance_error;
-    sim->state.setpoint_rotation_remaining = rotation_error / sim->odometry_rotation_error;
+    sim->state.setpoint_distance = distance_error / sim->odometry_distance_error;
+    sim->state.setpoint_rotation = rotation_error / sim->odometry_rotation_error;
 
     ApplyDrive(sim, left_velocity_target, right_velocity_target);
 }
@@ -495,6 +495,6 @@ void SetMouseSetpoint(Sim *sim, float distance, float rotation)
     sim->target_rotation = sim->mouse_rotation + rotation * sim->odometry_rotation_error;
 
     // Set remaining distance and rotation for mouse agent.
-    sim->state.setpoint_distance_remaining = distance;
-    sim->state.setpoint_rotation_remaining = rotation;
+    sim->state.setpoint_distance = distance;
+    sim->state.setpoint_rotation = rotation;
 }

@@ -50,8 +50,8 @@ static void UpdateStarterMouse(void *userdata, Sim *sim)
     const SimState *sim_state = GetSimState(sim);
 
     // Wait for the current step to finish before deciding the next move.
-    if (fabsf(sim_state->setpoint_distance_remaining) > DIST_DONE ||
-        fabsf(sim_state->setpoint_rotation_remaining) > ANGLE_DONE)
+    if (fabsf(sim_state->setpoint_distance) > DIST_DONE ||
+        fabsf(sim_state->setpoint_rotation) > ANGLE_DONE)
         return;
 
     // Visualize visited cells in the UI.

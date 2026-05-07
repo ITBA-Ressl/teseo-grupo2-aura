@@ -2,7 +2,7 @@
  * Teseo Micromouse Virtual Competition
  * Maze generation module
  *
- * @details Generates a random perfect maze using recursive backtracker.
+ * @details Generates and loads maze layouts for the Teseo simulation.
  * @author Theseús the hero
  */
 

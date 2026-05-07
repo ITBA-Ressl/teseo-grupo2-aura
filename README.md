@@ -54,7 +54,7 @@ El tiempo de cada corrida se cuenta desde que el ratón **abandona la celda inic
 El ratón se controla con la función:
 
 ```cpp
-SetMouseSetpoint(sim, distance, rotation);
+void SetMouseSetpoint(Sim *sim, float distance, float rotation);
 ```
 
 - `distance`: cuántos metros avanzar hacia adelante (positivo = adelante).
@@ -124,25 +124,25 @@ Tu agente debe implementar una estructura `MouseDescriptor` con cuatro callbacks
 struct MouseDescriptor {
     const char *name;
     void *(*create)();                          // inicialización
-    void  (*destroy)(void *userdata);           // liberación de memoria
-    void  (*update)(void *userdata, Sim *sim);  // lógica principal, llamada cada frame
-    void  (*reset)(void *userdata, Sim *sim);   // llamado en la primera corrida y cuando se resetea el ratón
+    void (*destroy)(void *userdata);            // liberación de memoria
+    void (*update)(void *userdata, Sim *sim);   // lógica principal, llamada cada frame
+    void (*reset)(void *userdata, Sim *sim);    // llamado en la primera corrida y cuando se resetea el ratón
 };
 ```
 
 Dentro de `update`, puedes usar las siguientes funciones:
 
 ```cpp
-const SimState *GetSimState(sim);          // sensores, setpoint y estado de la corrida
-void SetMouseSetpoint(sim, distance, rotation); // ver "El movimiento"
+const SimState *GetSimState(Sim *sim);          // sensores, setpoint y estado de la corrida
+void SetMouseSetpoint(Sim *sim, float distance, flaot rotation); // ver "El movimiento"
 
 float AngleDiff(float source, float target);                // diferencia angular en [-π, π]
 Vector2 Vector2FromAngle(float angle, float length = 1.0f); // vector a partir de un ángulo
 Cell PositionToCell(Vector2 position);                      // posición → celda del laberinto
 
-void PaintCell(sim, cell, color);   // COLOR_CELL_VISITED, COLOR_CELL_RED/GREEN/BLUE
-uint32_t GetCellColor(sim, cell);
-void ResetCellColors(sim);
+void PaintCell(Sim *sim, Cell cell, uint32_t color);        // COLOR_CELL_VISITED, COLOR_CELL_RED/GREEN/BLUE
+uint32_t GetCellColor(Sim *sim, Cell cell);
+void ResetCellColors(Sim *sim);
 ```
 
 No puedes acceder a los campos internos de `sim` ni a las otras funciones del simulador.
