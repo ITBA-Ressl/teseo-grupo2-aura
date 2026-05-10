@@ -16,7 +16,9 @@
 #include "sim/maze.h"
 #include "sim/sim.h"
 #include "ui/ui.h"
+
 #include "starter_mouse/starter_mouse.h"
+#include "keyboard_mouse/keyboard_mouse.h"
 
 /**
  * @brief Very simple command-line parser
@@ -56,9 +58,6 @@ std::map<std::string, std::string> ParseArgs(int argc, char *argv[])
 
 /**
  * @brief Main entry point of the program.
- *        Parses command line arguments,
- *        creates the maze and mouse instances,
- *        and starts the UI loop.
  */
 int main(int argc, char *argv[])
 {
@@ -91,14 +90,15 @@ int main(int argc, char *argv[])
     {
         printf("Usage: teseo [options]\n");
         printf("Options:\n");
-        printf("  --gen <number>        Generate a random maze (default seed: 0)\n");
-        printf("  --file <number>       Load the maze from a file\n");
+        printf("  --gen <number>        Generate a random maze\n");
+        printf("  --file <path>         Load the maze from a file\n");
 
         return 0;
     }
 
     // Create the mouse agent
     Mouse *mouse = CreateMouse(starter_mouse);
+    // Mouse *mouse = CreateMouse(keyboard_mouse);
 
     // Create the UI
     CreateUI(maze, mouse);

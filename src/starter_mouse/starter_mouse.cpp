@@ -22,7 +22,7 @@ struct AgentState
 };
 
 // Wall detection: sensor distance below this → wall present.
-#define WALL_DETECT_THRESHOLD 0.115f
+#define WALL_DETECT_THRESHOLD 0.12f
 
 // Step-completion thresholds.
 #define DIST_DONE 0.001f // m — remaining distance below this → translation complete
@@ -50,8 +50,8 @@ static void UpdateStarterMouse(void *userdata, Sim *sim)
     const SimState *sim_state = GetSimState(sim);
 
     // Wait for the current step to finish before deciding the next move.
-    if (fabsf(sim_state->mouse_remaining_distance) > DIST_DONE ||
-        fabsf(sim_state->mouse_remaining_rotation) > ANGLE_DONE)
+    if (fabsf(sim_state->setpoint_distance) > DIST_DONE ||
+        fabsf(sim_state->setpoint_rotation) > ANGLE_DONE)
         return;
 
     // Visualize visited cells in the UI.
@@ -59,9 +59,9 @@ static void UpdateStarterMouse(void *userdata, Sim *sim)
     PaintCell(sim, cell, COLOR_CELL_VISITED);
 
     // Wall detection: sensor distance < WALL_DETECT_THRESHOLD → wall present.
-    bool wall_right = sim_state->mouse_sensors[SENSOR_RIGHT] < WALL_DETECT_THRESHOLD;
-    bool wall_front = sim_state->mouse_sensors[SENSOR_FRONT] < WALL_DETECT_THRESHOLD;
-    bool wall_left = sim_state->mouse_sensors[SENSOR_LEFT] < WALL_DETECT_THRESHOLD;
+    bool wall_right = sim_state->ir_sensors[IR_SENSOR_RIGHT] < WALL_DETECT_THRESHOLD;
+    bool wall_front = sim_state->ir_sensors[IR_SENSOR_FRONT] < WALL_DETECT_THRESHOLD;
+    bool wall_left = sim_state->ir_sensors[IR_SENSOR_LEFT] < WALL_DETECT_THRESHOLD;
 
     // Right-hand wall follower logic.
     float next_distance = 0.0f;

@@ -17,7 +17,7 @@
 
 // Sensor angles
 
-float SENSOR_ANGLES[5] = {
+float IR_SENSOR_ANGLES[5] = {
     TURN_CCW,        // Left       (90° left)
     TURN_CCW / 2.0f, // Front-left (45° left)
     0,               // Front
@@ -38,16 +38,19 @@ struct Sim
     b2BodyId mouse_body;
 
     // Sim state
-    Vector2 mouse_position; // World position (meters, north/east coordinates)
-    float mouse_rotation;   // Rotation (radians, CCW+, 0 = East)
+    Vector2 mouse_position;      // World position (meters, north/east coordinates)
+    float mouse_rotation;        // Rotation (radians, CCW+, 0 = East)
+    Vector2 mouse_velocity_last; // World-frame velocity, kept across steps for acceleration computation
 
     SimState state;
 
     // Mouse controller
-    Vector2 setpoint_reference_position; // Reference position when setpoint was issued
-    float setpoint_reference_rotation;   // Reference rotation when setpoint was issued
-    float setpoint_target_distance;      // Target distance
-    float setpoint_target_rotation;      // Target rotation
+    Vector2 reference_position;    // Reference position when setpoint was issued
+    float reference_rotation;      // Reference rotation when setpoint was issued
+    float target_distance;         // Target distance
+    float target_rotation;         // Target rotation
+    float odometry_distance_error; // Odometric error distance
+    float odometry_rotation_error; // Odometric error rotation
 };
 
 // Math helpers
@@ -162,8 +165,8 @@ static void CreateMousePhysics(Sim *sim)
     body_def.type = b2_dynamicBody;
     body_def.position = b2Vec2(0.5f * CELL_SIZE, 0.5f * CELL_SIZE); // Start in center of cell (0,0)
     body_def.rotation = b2MakeRot(ROTATION_NORTH);
-    body_def.linearDamping = 2.0f; // Floor friction (s⁻¹)
-    body_def.angularDamping = 3.0f;
+    body_def.linearDamping = 0.0f;
+    body_def.angularDamping = 0.0f;
     body_def.fixedRotation = false;
     sim->mouse_body = b2CreateBody(sim->world, &body_def);
 
@@ -176,24 +179,39 @@ static void CreateMousePhysics(Sim *sim)
     b2CreatePolygonShape(sim->mouse_body, &shape_def, &box);
 }
 
+static void UpdateIMU(Sim *sim, float dt)
+{
+    // Get velocity
+    b2Vec2 b2_velocity = b2Body_GetLinearVelocity(sim->mouse_body);
+    Vector2 velocity = {b2_velocity.x, b2_velocity.y};
+
+    // Transform velocity to body frame
+    Vector2 mouse_velocity = Vector2Rotate(velocity, TURN_CCW - sim->mouse_rotation);
+
+    // Compute delta-v
+    Vector2 delta_v = Vector2Subtract(mouse_velocity, sim->mouse_velocity_last);
+    sim->mouse_velocity_last = mouse_velocity;
+
+    // Compute acceleration
+    sim->state.accelerometer = Vector2Scale(delta_v, 1.0f / dt);
+}
+
 static void UpdateMouseState(Sim *sim)
 {
-    // Kinematic state update
     b2Vec2 position = b2Body_GetPosition(sim->mouse_body);
     float rotation = b2Rot_GetAngle(b2Body_GetRotation(sim->mouse_body));
-    b2Vec2 velocity = b2Body_GetLinearVelocity(sim->mouse_body);
     float angular_velocity = b2Body_GetAngularVelocity(sim->mouse_body);
 
     sim->mouse_position = {position.x, position.y};
     sim->mouse_rotation = rotation;
+    sim->state.gyroscope = angular_velocity;
 
-    // Sensor state update
     b2QueryFilter filter = b2DefaultQueryFilter();
 
-    for (int i = 0; i < SENSOR_NUM; i++)
+    for (int i = 0; i < IR_SENSOR_NUM; i++)
     {
-        float ray_angle = rotation + SENSOR_ANGLES[i];
-        Vector2 direction = Vector2FromAngle(ray_angle, SENSOR_RANGE_MAX);
+        float ray_angle = rotation + IR_SENSOR_ANGLES[i];
+        Vector2 direction = Vector2FromAngle(ray_angle, IR_SENSOR_RANGE_MAX);
 
         b2Vec2 start = b2Vec2{position.x, position.y};
         b2Vec2 translation = b2Vec2{direction.x, direction.y};
@@ -201,10 +219,25 @@ static void UpdateMouseState(Sim *sim)
         b2RayResult rayResult = b2World_CastRayClosest(sim->world, start, translation, filter);
 
         if (rayResult.hit)
-            sim->state.mouse_sensors[i] = rayResult.fraction * SENSOR_RANGE_MAX;
+            sim->state.ir_sensors[i] = rayResult.fraction * IR_SENSOR_RANGE_MAX;
         else
-            sim->state.mouse_sensors[i] = SENSOR_RANGE_MAX;
+            sim->state.ir_sensors[i] = IR_SENSOR_RANGE_MAX;
     }
+}
+
+static void ResetMouseController(Sim *sim, Vector2 position, float rotation)
+{
+    sim->reference_position = position;
+    sim->reference_rotation = rotation;
+
+    sim->target_distance = 0.0f;
+    sim->odometry_distance_error = 1.0f;
+
+    sim->target_rotation = rotation;
+    sim->odometry_rotation_error = 1.0f;
+
+    sim->state.setpoint_distance = 0.0f;
+    sim->state.setpoint_rotation = 0.0f;
 }
 
 static void ResetMousePhysics(Sim *sim)
@@ -218,53 +251,65 @@ static void ResetMousePhysics(Sim *sim)
     b2Body_SetAngularVelocity(sim->mouse_body, 0.0f);
 
     UpdateMouseState(sim);
+    sim->mouse_velocity_last = {0.0f, 0.0f};
+    sim->state.accelerometer = {0.0f, 0.0f};
 
     // Reset controller
-    sim->setpoint_reference_position = position;
-    sim->setpoint_reference_rotation = rotation;
-    sim->setpoint_target_distance = 0.0f;
-    sim->setpoint_target_rotation = rotation;
+    ResetMouseController(sim, position, rotation);
+}
+
+static bool StartRun(Sim *sim)
+{
+    if (sim->state.time >= RUN_TIME_MAX)
+        return false;
+
+    if (sim->state.run_number >= RUN_TOTAL)
+        return false;
+
+    sim->state.run_number += 1;
+    sim->state.run_state = RUNSTATE_IDLE;
+    sim->state.run_time = 0.0f;
+
+    return true;
 }
 
 // Controller
 
-static void ApplyDrive(Sim *sim, float velocity_left_desired, float velocity_right_desired)
+static void ApplyDrive(Sim *sim, float left_wheel_target_velocity, float right_wheel_target_velocity)
 {
-    b2Vec2 velocity = b2Body_GetLinearVelocity(sim->mouse_body);
+    // Get current velocity and rotation
+    b2Vec2 b2_velocity = b2Body_GetLinearVelocity(sim->mouse_body);
+    Vector2 velocity = {b2_velocity.x, b2_velocity.y};
     float rotation = b2Rot_GetAngle(b2Body_GetRotation(sim->mouse_body));
     float angular_velocity = b2Body_GetAngularVelocity(sim->mouse_body);
 
-    // Body-frame forward unit vector
-    float fwd_x = std::cos(rotation);
-    float fwd_y = std::sin(rotation);
-
-    // Forward speed in body frame
-    float v_fwd = velocity.x * fwd_x + velocity.y * fwd_y;
+    // Decompose velocity into forward and lateral components
+    Vector2 forward = Vector2FromAngle(rotation);
+    Vector2 right = Vector2FromAngle(rotation + TURN_CW);
+    float forward_velocity = Vector2DotProduct(velocity, forward);
+    float lateral_velocity = Vector2DotProduct(velocity, right);
 
     // Actual wheel speeds
-    float velocity_left_current = v_fwd - angular_velocity * MOUSE_WHEEL_HALF_TRACK;
-    float velocity_right_current = v_fwd + angular_velocity * MOUSE_WHEEL_HALF_TRACK;
+    float left_wheel_current_velocity = forward_velocity - angular_velocity * MOUSE_WHEEL_HALF_TRACK;
+    float right_wheel_current_velocity = forward_velocity + angular_velocity * MOUSE_WHEEL_HALF_TRACK;
 
-    // Motor force (velocity P-control per wheel, clamped to motor limit)
-    float force_left = std::clamp(MOUSE_MOTOR_K * (velocity_left_desired - velocity_left_current),
-                                  -MOUSE_WHEEL_FORCE_MAX, MOUSE_WHEEL_FORCE_MAX);
-    float force_right = std::clamp(MOUSE_MOTOR_K * (velocity_right_desired - velocity_right_current),
-                                   -MOUSE_WHEEL_FORCE_MAX, MOUSE_WHEEL_FORCE_MAX);
+    // Back-EMF motor model: F = (k_t·k_e / R·r²) × (v_target − v_wheel)
+    float left_force = MOUSE_MOTOR_K * (left_wheel_target_velocity - left_wheel_current_velocity);
+    float right_force = MOUSE_MOTOR_K * (right_wheel_target_velocity - right_wheel_current_velocity);
 
-    // Net force (forward) and torque (CCW)
-    float force_net = force_left + force_right;
-    float tau = (force_right - force_left) * MOUSE_WHEEL_HALF_TRACK;
+    // Apply forward force
+    float force_magnitude = left_force + right_force;
+    Vector2 forward_force = Vector2Scale(forward, force_magnitude);
+    b2Body_ApplyForceToCenter(sim->mouse_body, b2Vec2(forward_force.x, forward_force.y), true);
 
-    b2Body_ApplyForceToCenter(sim->mouse_body, b2Vec2(force_net * fwd_x, force_net * fwd_y), true);
+    // Apply lateral no-slip impulse: cancel velocity perpendicular to heading.
+    float lateral_impulse_magnitude = -MOUSE_MASS * lateral_velocity;
+    Vector2 lateral_impulse = Vector2Scale(right, lateral_impulse_magnitude);
+    b2Body_ApplyLinearImpulseToCenter(sim->mouse_body, b2Vec2(lateral_impulse.x, lateral_impulse.y), true);
+
+    // Apply torque
+    float tau = (right_force - left_force) * MOUSE_WHEEL_HALF_TRACK;
     b2Body_ApplyTorque(sim->mouse_body, tau, true);
-
-    // Lateral no-slip impulse: cancel velocity perpendicular to heading.
-    // Left unit vector (CCW 90° from forward): (-fwd_y, fwd_x)
-    float lat_vel = velocity.x * (-fwd_y) + velocity.y * fwd_x;
-    float lat_impulse = -MOUSE_MASS * lat_vel;
-    b2Body_ApplyLinearImpulseToCenter(sim->mouse_body,
-                                      b2Vec2(lat_impulse * (-fwd_y), lat_impulse * fwd_x),
-                                      true);
 }
 
 static void UpdateMouseController(Sim *sim)
@@ -272,32 +317,42 @@ static void UpdateMouseController(Sim *sim)
     Vector2 position = sim->mouse_position;
     float rotation = sim->mouse_rotation;
 
-    // Rotation error
-    float rotation_error = AngleDiff(rotation, sim->setpoint_target_rotation);
+    // Current distance
+    Vector2 position_error = Vector2Subtract(position, sim->reference_position);
+
+    // Project position_error onto forward direction
+    Vector2 forward = Vector2FromAngle(rotation);
+    float distance_current = Vector2DotProduct(position_error, forward);
 
     // Distance error
-    Vector2 position_error = Vector2Subtract(position, sim->setpoint_reference_position);
-    Vector2 forward = Vector2FromAngle(rotation);
-    // Projects position_error onto forward direction
-    float distance_current = Vector2DotProduct(position_error, forward);
-    float distance_error = sim->setpoint_target_distance - distance_current;
+    float distance_error = sim->target_distance - distance_current;
 
-    // P-control: simultaneous forward speed + angular rate
-    float velocity_desired = std::clamp(MOUSE_KP_DISTANCE * distance_error,
-                                        -MOUSE_WHEEL_VELOCITY_MAX, MOUSE_WHEEL_VELOCITY_MAX);
-    float angular_velocity_desired = std::clamp(MOUSE_KP_ROTATION * rotation_error,
-                                                -WHEEL_ANGULAR_VELOCITY_MAX, WHEEL_ANGULAR_VELOCITY_MAX);
+    // Rotation error
+    float rotation_error = AngleDiff(rotation, sim->target_rotation);
 
-    // Differential drive wheel speeds
-    float velocity_left = std::clamp(velocity_desired - angular_velocity_desired * MOUSE_WHEEL_HALF_TRACK,
-                                     -MOUSE_WHEEL_VELOCITY_MAX, MOUSE_WHEEL_VELOCITY_MAX);
-    float velocity_right = std::clamp(velocity_desired + angular_velocity_desired * MOUSE_WHEEL_HALF_TRACK,
-                                      -MOUSE_WHEEL_VELOCITY_MAX, MOUSE_WHEEL_VELOCITY_MAX);
+    // Current body velocities for D term
+    b2Vec2 b2_velocity = b2Body_GetLinearVelocity(sim->mouse_body);
+    float forward_velocity = Vector2DotProduct({b2_velocity.x, b2_velocity.y}, forward);
+    float angular_velocity = b2Body_GetAngularVelocity(sim->mouse_body);
 
-    sim->state.mouse_remaining_distance = distance_error;
-    sim->state.mouse_remaining_rotation = rotation_error;
+    // PD control: P drives toward setpoint, D damps velocity to prevent overshoot
+    float velocity_target = MOUSE_KP_DISTANCE * distance_error - MOUSE_KD_DISTANCE * forward_velocity;
+    float angular_velocity_target = MOUSE_KP_ROTATION * rotation_error - MOUSE_KD_ROTATION * angular_velocity;
 
-    ApplyDrive(sim, velocity_left, velocity_right);
+    // Clamp speeds to physical maximum
+    velocity_target = std::clamp(velocity_target,
+                                 -MOUSE_WHEEL_VELOCITY_MAX, MOUSE_WHEEL_VELOCITY_MAX);
+    angular_velocity_target = std::clamp(angular_velocity_target,
+                                         -WHEEL_ANGULAR_VELOCITY_MAX, WHEEL_ANGULAR_VELOCITY_MAX);
+
+    // Differential drive: clamp target wheel speeds to physical maximum
+    float left_velocity_target = velocity_target - angular_velocity_target;
+    float right_velocity_target = velocity_target + angular_velocity_target;
+
+    sim->state.setpoint_distance = distance_error / sim->odometry_distance_error;
+    sim->state.setpoint_rotation = rotation_error / sim->odometry_rotation_error;
+
+    ApplyDrive(sim, left_velocity_target, right_velocity_target);
 }
 
 // Public API
@@ -318,8 +373,6 @@ Sim *CreateSim(const Maze *maze)
 
     ResetMousePhysics(sim);
 
-    UpdateMouseState(sim);
-
     return sim;
 }
 
@@ -332,13 +385,8 @@ void DestroySim(Sim *sim)
 
 bool ResetSim(Sim *sim)
 {
-    if (sim->state.run_number >= RUN_TOTAL)
+    if (!StartRun(sim))
         return false;
-
-    // Reset run state
-    sim->state.run_number += 1;
-    sim->state.run_state = RUNSTATE_IDLE;
-    sim->state.run_time = 0.0f;
 
     ResetMousePhysics(sim);
 
@@ -347,13 +395,10 @@ bool ResetSim(Sim *sim)
 
 bool IsSimRunning(Sim *sim)
 {
-    if (sim->state.run_number == 0)
-        return false;
-
-    if (sim->state.run_number >= RUN_TOTAL && sim->state.run_state == RUNSTATE_RETURNING)
-        return false;
-
     if (sim->state.time >= RUN_TIME_MAX)
+        return false;
+
+    if (sim->state.run_number == 0)
         return false;
 
     return true;
@@ -361,20 +406,29 @@ bool IsSimRunning(Sim *sim)
 
 void UpdateSim(Sim *sim, float dt)
 {
-    // Update timers
-    if (!(sim->state.run_number == 1 && sim->state.run_state == RUNSTATE_IDLE))
-        sim->state.time += dt;
-
-    if (sim->state.run_state == RUNSTATE_IDLE)
-        sim->state.run_time = 0;
-    else if (sim->state.run_state == RUNSTATE_RUNNING)
-        sim->state.run_time += dt;
-
     // Update mouse controller
     UpdateMouseController(sim);
 
     // Step physics
     b2World_Step(sim->world, dt, 8);
+
+    // Update timers
+    if (sim->state.run_number >= 1)
+    {
+        sim->state.time += dt;
+        if (sim->state.time >= RUN_TIME_MAX)
+            sim->state.time = RUN_TIME_MAX;
+    }
+
+    if (sim->state.run_state == RUNSTATE_RUNNING)
+    {
+        sim->state.run_time += dt;
+        if (sim->state.run_time > RUN_TIME_MAX)
+            sim->state.run_time = RUN_TIME_MAX;
+    }
+
+    // Update IMU readings (accelerometer and gyroscope)
+    UpdateIMU(sim, dt);
 
     // Update mouse state
     UpdateMouseState(sim);
@@ -382,19 +436,30 @@ void UpdateSim(Sim *sim, float dt)
     Cell cell = PositionToCell(sim->mouse_position);
 
     // Check start position
-    if (sim->state.run_state == RUNSTATE_IDLE)
+    switch (sim->state.run_state)
     {
+    case RUNSTATE_IDLE:
         if (!isStartCell(cell))
             sim->state.run_state = RUNSTATE_RUNNING;
-    }
 
-    // Check goal position
-    if (IsGoalCell(cell))
-    {
-        sim->state.run_state = RUNSTATE_RETURNING;
+        break;
 
-        if (sim->state.run_time < sim->state.run_time_best || sim->state.run_time_best == 0.0f)
-            sim->state.run_time_best = sim->state.run_time;
+    case RUNSTATE_RUNNING:
+        if (IsGoalCell(cell))
+        {
+            sim->state.run_state = RUNSTATE_RETURNING;
+
+            if (sim->state.run_time < sim->state.run_time_best || sim->state.run_time_best == 0.0f)
+                sim->state.run_time_best = sim->state.run_time;
+        }
+
+        break;
+
+    case RUNSTATE_RETURNING:
+        if (isStartCell(cell))
+            StartRun(sim);
+
+        break;
     }
 }
 
@@ -415,18 +480,21 @@ const SimState *GetSimState(Sim *sim)
 
 void SetMouseSetpoint(Sim *sim, float distance, float rotation)
 {
-    // Add mechanical noise
+    // Set reference position and rotation for the mouse controller
+    sim->reference_position = sim->mouse_position;
+    sim->reference_rotation = sim->mouse_rotation;
+
+    // Odometry error
     static std::mt19937 rng(std::random_device{}());
-    static std::normal_distribution<float> dist(0.0f, 1.0f);
-    distance += dist(rng) * SETPOINT_DISTANCE_NOISE * distance;
-    rotation += dist(rng) * SETPOINT_ROTATION_NOISE;
+    static std::normal_distribution<float> noise(0.0f, 1.0f);
+    sim->odometry_distance_error = 1.0f + ODOMETRY_DISTANCE_ERROR * noise(rng);
+    sim->odometry_rotation_error = 1.0f + ODOMETRY_ROTATION_ERROR * noise(rng);
 
-    sim->setpoint_reference_position = sim->mouse_position;
-    sim->setpoint_reference_rotation = sim->mouse_rotation;
+    // Set target distance and rotation for the mouse controller, applying odometry error.
+    sim->target_distance = distance * sim->odometry_distance_error;
+    sim->target_rotation = sim->mouse_rotation + rotation * sim->odometry_rotation_error;
 
-    sim->setpoint_target_distance = distance;
-    sim->setpoint_target_rotation = sim->mouse_rotation + rotation;
-
-    sim->state.mouse_remaining_distance = distance;
-    sim->state.mouse_remaining_rotation = AngleDiff(sim->mouse_rotation, sim->setpoint_target_rotation);
+    // Set remaining distance and rotation for mouse agent.
+    sim->state.setpoint_distance = distance;
+    sim->state.setpoint_rotation = rotation;
 }

@@ -13,6 +13,7 @@ set(SOURCES
     src/sim/sim.cpp
     src/ui/ui.cpp
     src/starter_mouse/starter_mouse.cpp
+    src/keyboard_mouse/keyboard_mouse.cpp
 )
 
 add_executable(teseo ${SOURCES})
