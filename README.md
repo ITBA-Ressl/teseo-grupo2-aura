@@ -28,25 +28,27 @@ Para compilar el proyecto, instala primero las dependencias:
 vcpkg install raylib box2d
 ```
 
-Ejecuta el programa con:
+Ejecuta el simulador con:
 
 ```bash
 teseo --gen 0         # laberinto generado con semilla 0
 teseo --file abc.maze # laberinto cargado desde archivo
 ```
 
-Puedes descargar laberintos reales de competencia en estos sitios:
+Puedes descargar laberintos oficiales de competencias aquí:
 
 - [micromouseonline/mazefiles](https://github.com/micromouseonline/mazefiles)
 - [tcp4me.com - Micromouse Mazes](https://www.tcp4me.com/mmr/mazes/)
 
-Presiona `[R]` para iniciar la primera corrida.
+Presiona `R` para iniciar la primera corrida.
 
 El laberinto sigue el estándar **IEEE Micromouse de 16x16 celdas** (18 cm cada una). El ratón arranca en la esquina suroeste `(0, 0)`, orientado al norte. El objetivo es el cuadrado central de **2x2 celdas**.
 
-Dispones de **5 corridas** y **300 segundos** de tiempo total. La mejor marca es la que cuenta.
+Dispones de **5 corridas** y **300 segundos** de tiempo total. Cuenta la mejor marca individual.
 
-El tiempo de cada corrida se cuenta desde que el ratón **abandona la celda inicial** hasta que **llega a cualquiera de las cuatro celdas del destino**. Al terminar una corrida, el ratón debe **volver al origen** para poder iniciar la siguiente.
+El tiempo de cada corrida se cuenta desde que el ratón **abandona la celda inicial** hasta que **llega a cualquiera de las cuatro celdas centrales**. Al terminar una corrida, el ratón debe **regresar autónomamente al origen** para luego iniciar la siguiente.
+
+Si el ratón se bloquea, es posible reiniciarlo con la tecla `R`.
 
 ## El movimiento
 
@@ -56,16 +58,16 @@ El ratón se controla con la función:
 void SetMouseSetpoint(Sim *sim, float distance, float rotation);
 ```
 
-- `distance`: cuántos metros avanzar hacia adelante (positivo = adelante).
-- `rotation`: cuánto girar respecto a la orientación actual, en radianes (positivo = izquierda, negativo = derecha). Puedes usar las constantes `TURN_CCW`, `TURN_CW` y `TURN_REVERSE`.
+- `distance`: metros a avanzar hacia adelante (positivo = adelante).
+- `rotation`: rotación en radianes respecto de la orientación actual (positivo = izquierda). Puedes usar las constantes `TURN_CCW`, `TURN_CW` y `TURN_REVERSE`.
 
-Cuánto más lejos pones el setpoint, más rápido se mueve el mouse.
+Cuánto más lejos pongas el setpoint, más rápido se moverá el mouse.
 
-⚠️ **Importante**: el simulador introduce error de odometría. No asumas que el ratón termina exactamente donde le pediste.
+⚠️ **Importante**: el simulador introduce **error de odometría**. No asumas que el ratón termina exactamente donde le pediste.
 
 ## Los sensores
 
-Los sensores se leen a través de:
+Puedes leer el estado de los sensores con:
 
 ```cpp
 const SimState *s = GetSimState(sim);
@@ -89,7 +91,7 @@ s->ir_sensors[IR_SENSOR_LEFT]    // distancia a la izquierda (m)
 // ...
 ```
 
-El alcance máximo es **1 m**. Si no hay pared en rango, el sensor devuelve **1 m**.
+El alcance máximo es **1 m**. Si no hay pared en rango, el sensor devuelve `1.0`.
 
 ### IMU
 
@@ -111,13 +113,23 @@ s->setpoint_rotation_remaining   // float (rad, CCW+): rotación restante
 
 Puedes cambiar el setpoint en todo momento.
 
+### Estado de la simulación
+
+```cpp
+s->time;          // Tiempo total de simulación
+s->run_number;    // Número de corrida actual
+s->run_state;     // idle (en celda inicial) / running / returning
+s->run_time;      // Tiempo de la corrida actual
+s->run_time_best; // Mejor tiempo hasta ahora
+```
+
 ## Tu misión
 
 Implementa tu propio agente en una carpeta nueva dentro de `src/`. Puedes copiar `src/starter_mouse/` como punto de partida.
 
 ### API del agente
 
-Tu agente debe implementar una estructura `MouseDescriptor` con cuatro callbacks:
+Debes implementar la estructura `MouseDescriptor`:
 
 ```cpp
 struct MouseDescriptor {
@@ -129,20 +141,16 @@ struct MouseDescriptor {
 };
 ```
 
-Dentro de `update`, puedes usar las siguientes funciones:
+Dentro de `update` puedes usar estas funciones:
 
-```cpp
-const SimState *GetSimState(Sim *sim);          // sensores, setpoint y estado de la corrida
-void SetMouseSetpoint(Sim *sim, float distance, flaot rotation); // ver "El movimiento"
-
-float AngleDiff(float source, float target);                // diferencia angular en [-π, π]
-Vector2 Vector2FromAngle(float angle, float length = 1.0f); // vector a partir de un ángulo
-Cell PositionToCell(Vector2 position);                      // posición → celda del laberinto
-
-void PaintCell(Sim *sim, Cell cell, uint32_t color);        // COLOR_CELL_VISITED, COLOR_CELL_RED/GREEN/BLUE
-uint32_t GetCellColor(Sim *sim, Cell cell);
-void ResetCellColors(Sim *sim);
-```
+- `GetSimState(sim)`
+- `SetMouseSetpoint(sim, distance, rotation)`
+- `AngleDiff(source, target)`
+- `Vector2 Vector2FromAngle(angle, length);`
+- `PositionToCell(position);`
+- `PaintCell(sim, cell, color);`
+- `GetCellColor(sim, cell);`
+- `ResetCellColors(sim);`
 
 No puedes acceder a los campos internos de `sim` ni a las otras funciones del simulador.
 
@@ -150,47 +158,50 @@ No puedes acceder a los campos internos de `sim` ni a las otras funciones del si
 
 1. Copia `src/starter_mouse/` a `src/tu_equipo/`.
 2. Renombra los archivos, la struct interna y la variable `MouseDescriptor`.
-3. Agrega tu `.cpp` a `SOURCES` en `CMakeLists.txt`.
-4. En `src/main.cpp`, incluye tu header y pasa tu descriptor a `CreateMouse()`.
+3. Agrega tu `.cpp` en `CMakeLists.txt`.
+4. Incluye tu header en `src/main.cpp` y regístralo con `CreateMouse()`.
 
 ### Estrategias posibles
 
-El **starter mouse** usa un seguidor de pared derecha: es fácil de entender, pero puede quedar en un bucle infinito si el laberinto tiene ciclos, y está lejos de ser óptimo.
+El **starter mouse** implementa un simple seguidor de pared derecha. Es útil para comenzar, pero poco eficiente y puede atascarse en bucles.
 
 Algunas ideas mejores:
 
-- **Flood Fill**: asigna a cada celda una distancia al objetivo y avanza siempre hacia el valor menor. Es el algoritmo base en competencias reales. Puede actualizarse online a medida que el ratón descubre paredes.
-- **Dead-end filling**: elimina callejones del mapa antes de trazar la ruta.
-- **Dijkstra / A\***: búsqueda de camino óptimo sobre el mapa conocido.
-- **Estrategia multi-corrida**: en las primeras corridas explora y construye un mapa; en las últimas, ejecuta la ruta óptima sin detenerse a explorar.
+- **Flood Fill** (el más usado en competencias reales)
+- **Dead-end filling**
+- **Dijkstra / A\*** sobre el mapa conocido
+- **Estrategia multi-corrida**: explorar en las primeras corridas y ejecutar la ruta óptima en las últimas
 
 ## Entrega
 
 Debes entregar:
 
 - El código de tu agente.
-- El archivo `ENTREGA.md` **completo** con la siguiente información:
+- Un archivo `ENTREGA.md` donde documentes:
   - Nombre del equipo y del ratón.
   - Descripción del algoritmo implementado.
-  - Mejor tiempo logrado (indica la semilla del laberinto o el archivo usado).
+  - Mejor tiempo logrado (indica la semilla del laberinto o el archivo que usaste).
   - Complejidad temporal y espacial de tu algoritmo.
   - Dificultades encontradas y cómo las resolviste.
   - Reflexión: ¿qué limitaciones tiene tu solución? ¿Qué mejorarías?
 
 ## Recomendaciones
 
-- Logra que tu ratón sea robusto al **error odométrico**. Para ello la información de los sensores IR y del giróscopo te será muy útil.
-- Empieza con el seguidor de pared y asegúrate de que funciona correctamente antes de intentar algo más complejo.
-- Usa `PaintCell` para visualizar el estado interno de tu algoritmo mientras depuras.
-- Prueba con varios valores de `--gen` y con archivos cargados por `--file`: un buen algoritmo debe funcionar en cualquier laberinto, especialmente en los de competencias.
+- Prueba el **keyboard mouse** (WASD) con el laberinto `empty_maze.txt` para adquirir intuición de la física. Recuerda apretar `R` para iniciar el simulador.
+- Logra que tu ratón sea robusto al **error odométrico**, que es ≈7 mm/m en distancia y ≈4° cada 90° en rotación. Puedes compensar el error de distancia con los sensores IR, y el error de rotación, integrando el dato del giróscopo.
+- Empieza con el seguidor de pared y asegúrate de que funciona bien antes de intentar algo más complejo.
+- Usa `PaintCell` para depurar.
+- Prueba con múltiples semillas (`--gen`) y laberintos oficiales.
+- Evita chocar con las paredes para no perder tiempo.
+- Con la siguiente salvedad: puedes chocar suavemente con las paredes para compensar el error odométrico de rotación.
 - Usa Git y haz commits con frecuencia.
-- **No modifiques** el motor ni la UI del simulador.
+- **No modifiques** el motor del simulador ni su UI.
 
 ## Bonus points 🚀
 
 - Optimiza la trayectoria para **minimizar giros**: recorrer varias celdas seguidas en línea recta suele ser mucho más rápido.
 - Optimiza los giros.
-- Implementa recorridos en **diagonal sin giro** cuando tu estrategia lo permita.
+- Implementa recorridos en **diagonal sin giro** cuando el laberinto lo permita.
 
 ## Referencias
 
